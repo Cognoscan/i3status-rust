@@ -634,8 +634,8 @@
         <span class="kw">if </span>val.wind &gt; max.wind {
             max.wind_direction = val.wind_direction;
             max.wind = val.wind;
+            max.wind_kmh = val.wind_kmh;
         }
-        max.wind_kmh = max.wind_kmh.max(val.wind_kmh);
 
         <span class="comment">// Min
         </span>min.temp = min.temp.min(val.temp);
@@ -644,8 +644,8 @@
         <span class="kw">if </span>val.wind &lt; min.wind {
             min.wind_direction = val.wind_direction;
             min.wind = val.wind;
+            min.wind_kmh = val.wind_kmh;
         }
-        min.wind_kmh = min.wind_kmh.min(val.wind_kmh);
     }
 
     <span class="kw">let </span>count = data.len() <span class="kw">as </span>f64;
