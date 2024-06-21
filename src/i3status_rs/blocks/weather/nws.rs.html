@@ -564,7 +564,7 @@
         <span class="kw">let </span>icon = short_forecast_to_icon(<span class="kw-2">&amp;</span><span class="self">self</span>.short_forecast, !<span class="self">self</span>.is_daytime);
         <span class="kw">let </span>weather = <span class="self">Self</span>::icon_to_word(icon);
         WeatherMoment {
-            icon: short_forecast_to_icon(<span class="kw-2">&amp;</span><span class="self">self</span>.short_forecast, !<span class="self">self</span>.is_daytime),
+            icon,
             weather,
             weather_verbose: <span class="self">self</span>.short_forecast.clone(),
             temp: <span class="self">self</span>.temperature.value,
