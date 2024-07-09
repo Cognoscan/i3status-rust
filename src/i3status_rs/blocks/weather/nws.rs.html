@@ -378,6 +378,7 @@
 <a href="#378" id="378">378</a>
 <a href="#379" id="379">379</a>
 <a href="#380" id="380">380</a>
+<a href="#381" id="381">381</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Support for using the US National Weather Service API.
 //!
 //! The API is documented [here](https://www.weather.gov/documentation/services-web-api).
@@ -506,8 +507,9 @@
 }
 
 <span class="kw">impl </span>ApiForecast {
-    <span class="kw">fn </span>wind_direction(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; f64 {
+    <span class="kw">fn </span>wind_direction(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;f64&gt; {
         <span class="kw">let </span>dir = <span class="kw">match </span><span class="self">self</span>.wind_direction.as_str() {
+            <span class="string">"N" </span>=&gt; <span class="number">0</span>,
             <span class="string">"NNE" </span>=&gt; <span class="number">1</span>,
             <span class="string">"NE" </span>=&gt; <span class="number">2</span>,
             <span class="string">"ENE" </span>=&gt; <span class="number">3</span>,
@@ -523,9 +525,9 @@
             <span class="string">"WNW" </span>=&gt; <span class="number">13</span>,
             <span class="string">"NW" </span>=&gt; <span class="number">14</span>,
             <span class="string">"NNW" </span>=&gt; <span class="number">15</span>,
-            <span class="kw">_ </span>=&gt; <span class="number">0</span>,
+            <span class="kw">_ </span>=&gt; <span class="kw">return </span><span class="prelude-val">None</span>,
         };
-        (dir <span class="kw">as </span>f64) * (<span class="number">360.0 </span>/ <span class="number">16.0</span>)
+        <span class="prelude-val">Some</span>((dir <span class="kw">as </span>f64) * (<span class="number">360.0 </span>/ <span class="number">16.0</span>))
     }
 
     <span class="kw">fn </span>icon_to_word(icon: WeatherIcon) -&gt; String {
@@ -572,7 +574,7 @@
             humidity: <span class="self">self</span>.relative_humidity.value,
             wind: <span class="self">self</span>.wind_speed.value,
             wind_kmh: <span class="self">self</span>.wind_kmh(),
-            wind_direction: <span class="prelude-val">Some</span>(<span class="self">self</span>.wind_direction()),
+            wind_direction: <span class="self">self</span>.wind_direction(),
         }
     }
 
@@ -583,7 +585,7 @@
             humidity: <span class="self">self</span>.relative_humidity.value,
             wind: <span class="self">self</span>.wind_speed.value,
             wind_kmh: <span class="self">self</span>.wind_kmh(),
-            wind_direction: <span class="prelude-val">Some</span>(<span class="self">self</span>.wind_direction()),
+            wind_direction: <span class="self">self</span>.wind_direction(),
         }
     }
 }
@@ -597,20 +599,20 @@
     <span class="kw">let </span><span class="kw-2">mut </span>wind_kmh_north = <span class="number">0.0</span>;
     <span class="kw">let </span><span class="kw-2">mut </span>wind_kmh_east = <span class="number">0.0</span>;
     <span class="kw">let </span><span class="kw-2">mut </span>max = ForecastAggregate {
-        temp: -<span class="number">1000.0</span>,
-        apparent: -<span class="number">1000.0</span>,
-        humidity: <span class="number">0.0</span>,
-        wind: <span class="number">0.0</span>,
-        wind_kmh: <span class="number">0.0</span>,
-        wind_direction: <span class="prelude-val">Some</span>(<span class="number">0.0</span>),
+        temp: f64::MIN,
+        apparent: f64::MIN,
+        humidity: f64::MIN,
+        wind: f64::MIN,
+        wind_kmh: f64::MIN,
+        wind_direction: <span class="prelude-val">None</span>,
     };
     <span class="kw">let </span><span class="kw-2">mut </span>min = ForecastAggregate {
-        temp: <span class="number">1000.0</span>,
-        apparent: <span class="number">1000.0</span>,
-        humidity: <span class="number">100.0</span>,
-        wind: <span class="number">1000.0</span>,
-        wind_kmh: <span class="number">1000.0</span>,
-        wind_direction: <span class="prelude-val">Some</span>(<span class="number">0.0</span>),
+        temp: f64::MAX,
+        apparent: f64::MAX,
+        humidity: f64::MAX,
+        wind: f64::MAX,
+        wind_kmh: f64::MAX,
+        wind_direction: <span class="prelude-val">None</span>,
     };
     <span class="kw">for </span>val <span class="kw">in </span>data {
         <span class="comment">// Summations for averaging
