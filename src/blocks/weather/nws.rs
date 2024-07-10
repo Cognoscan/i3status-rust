@@ -16,7 +16,9 @@ use serde::Deserialize;
 
 const API_URL: &str = "https://api.weather.gov/";
 
-const MPH_TO_KPH: f64 = 1.609344;
+const MPH_TO_KMH: f64 = 1.609344;
+const MPH_TO_MS: f64 = 1.609344 / 3.6;
+const KMH_TO_MS: f64 = 1.0 / 3.6;
 
 #[derive(Deserialize, Debug, SmartDefault)]
 #[serde(tag = "name", rename_all = "lowercase", deny_unknown_fields, default)]
@@ -98,36 +100,38 @@ struct ApiRelativeLocationProperties {
 }
 
 #[derive(Deserialize, Debug)]
-struct ApiForecastResponse {
-    properties: ApiForecastProperties,
+struct ApiForecastResponse<'a> {
+    #[serde(borrow)]
+    properties: ApiForecastProperties<'a>,
 }
 
 #[derive(Deserialize, Debug)]
-struct ApiForecastProperties {
-    periods: Vec<ApiForecast>,
+struct ApiForecastProperties<'a> {
+    #[serde(borrow)]
+    periods: Vec<ApiForecast<'a>>,
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-struct ApiValue {
+struct ApiValue<'a> {
     value: f64,
-    unit_code: String,
+    unit_code: &'a str,
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-struct ApiForecast {
+struct ApiForecast<'a> {
     is_daytime: bool,
-    temperature: ApiValue,
-    relative_humidity: ApiValue,
-    wind_speed: ApiValue,
-    wind_direction: String,
-    short_forecast: String,
+    temperature: ApiValue<'a>,
+    relative_humidity: ApiValue<'a>,
+    wind_speed: ApiValue<'a>,
+    wind_direction: &'a str,
+    short_forecast: &'a str,
 }
 
-impl ApiForecast {
+impl<'a> ApiForecast<'a> {
     fn wind_direction(&self) -> Option<f64> {
-        let dir = match self.wind_direction.as_str() {
+        let dir = match self.wind_direction {
             "N" => 0,
             "NNE" => 1,
             "NE" => 2,
@@ -162,11 +166,27 @@ impl ApiForecast {
         .to_string()
     }
 
-    fn wind_kmh(&self) -> f64 {
+    fn wind_speed_kmh(&self) -> f64 {
         if self.wind_speed.unit_code.ends_with("km_h-1") {
             self.wind_speed.value
         } else {
-            self.wind_speed.value * MPH_TO_KPH
+            self.wind_speed.value * MPH_TO_KMH
+        }
+    }
+
+    fn wind_speed_local_units(&self) -> f64 {
+        if self.wind_speed.unit_code.ends_with("km_h-1") {
+            self.wind_speed.value * KMH_TO_MS
+        } else {
+            self.wind_speed.value
+        }
+    }
+
+    fn wind_speed_ms(&self) -> f64 {
+        if self.wind_speed.unit_code.ends_with("km_h-1") {
+            self.wind_speed.value * KMH_TO_MS
+        } else {
+            self.wind_speed.value * MPH_TO_MS
         }
     }
 
@@ -177,22 +197,27 @@ impl ApiForecast {
             (self.temperature.value - 32.0) * 5.0 / 9.0
         };
         let humidity = self.relative_humidity.value;
-        let wind_speed = self.wind_kmh();
-        australian_apparent_temp(temp, humidity, wind_speed)
+        let wind_speed = self.wind_speed_ms();
+        let apparent = australian_apparent_temp(temp, humidity, wind_speed);
+        if self.temperature.unit_code.ends_with("degC") {
+            apparent
+        } else {
+            apparent * 9.0 / 5.0 + 32.0
+        }
     }
 
     fn to_moment(&self) -> WeatherMoment {
-        let icon = short_forecast_to_icon(&self.short_forecast, !self.is_daytime);
+        let icon = short_forecast_to_icon(self.short_forecast, !self.is_daytime);
         let weather = Self::icon_to_word(icon);
         WeatherMoment {
             icon,
             weather,
-            weather_verbose: self.short_forecast.clone(),
+            weather_verbose: self.short_forecast.to_string(),
             temp: self.temperature.value,
             apparent: self.apparent_temp(),
             humidity: self.relative_humidity.value,
-            wind: self.wind_speed.value,
-            wind_kmh: self.wind_kmh(),
+            wind: self.wind_speed_local_units(),
+            wind_kmh: self.wind_speed_kmh(),
             wind_direction: self.wind_direction(),
         }
     }
@@ -202,8 +227,8 @@ impl ApiForecast {
             temp: self.temperature.value,
             apparent: self.apparent_temp(),
             humidity: self.relative_humidity.value,
-            wind: self.wind_speed.value,
-            wind_kmh: self.wind_kmh(),
+            wind: self.wind_speed_local_units(),
+            wind_kmh: self.wind_speed_kmh(),
             wind_direction: self.wind_direction(),
         }
     }
@@ -311,7 +336,7 @@ impl WeatherProvider for Service<'_> {
             self.location.clone().error("No location was provided")?
         };
 
-        let data: ApiForecastResponse = REQWEST_CLIENT
+        let resp = REQWEST_CLIENT
             .get(location.query)
             .header(
                 "Feature-Flags",
@@ -320,9 +345,11 @@ impl WeatherProvider for Service<'_> {
             .send()
             .await
             .error("weather request failed")?
-            .json()
+            .bytes()
             .await
-            .error("parsing weather data failed")?;
+            .error("retrieving weather data failed")?;
+        let data: ApiForecastResponse =
+            serde_json::from_slice(&resp).error("parsing weather data failed")?;
 
         let data = data.properties.periods;
         let current = data.first().error("No current weather")?;
