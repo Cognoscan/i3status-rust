@@ -379,6 +379,18 @@
 <a href="#379" id="379">379</a>
 <a href="#380" id="380">380</a>
 <a href="#381" id="381">381</a>
+<a href="#382" id="382">382</a>
+<a href="#383" id="383">383</a>
+<a href="#384" id="384">384</a>
+<a href="#385" id="385">385</a>
+<a href="#386" id="386">386</a>
+<a href="#387" id="387">387</a>
+<a href="#388" id="388">388</a>
+<a href="#389" id="389">389</a>
+<a href="#390" id="390">390</a>
+<a href="#391" id="391">391</a>
+<a href="#392" id="392">392</a>
+<a href="#393" id="393">393</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Support for using the US National Weather Service API.
 //!
 //! The API is documented [here](https://www.weather.gov/documentation/services-web-api).
@@ -598,6 +610,7 @@
     <span class="kw">let </span><span class="kw-2">mut </span>wind_east = <span class="number">0.0</span>;
     <span class="kw">let </span><span class="kw-2">mut </span>wind_kmh_north = <span class="number">0.0</span>;
     <span class="kw">let </span><span class="kw-2">mut </span>wind_kmh_east = <span class="number">0.0</span>;
+    <span class="kw">let </span><span class="kw-2">mut </span>wind_count = <span class="number">0.0</span>;
     <span class="kw">let </span><span class="kw-2">mut </span>max = ForecastAggregate {
         temp: f64::MIN,
         apparent: f64::MIN,
@@ -619,15 +632,14 @@
         </span>temp += val.temp;
         apparent += val.apparent;
         humidity += val.humidity;
-        <span class="kw">let </span>(sin, cos) = val
-            .wind_direction
-            .unwrap_or_default()
-            .to_radians()
-            .sin_cos();
-        wind_north += val.wind * cos;
-        wind_east += val.wind * sin;
-        wind_kmh_north += val.wind_kmh * cos;
-        wind_kmh_east += val.wind_kmh * sin;
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(degrees) = val.wind_direction {
+            <span class="kw">let </span>(sin, cos) = degrees.to_radians().sin_cos();
+            wind_north += val.wind * cos;
+            wind_east += val.wind * sin;
+            wind_kmh_north += val.wind_kmh * cos;
+            wind_kmh_east += val.wind_kmh * sin;
+            wind_count += <span class="number">1.0</span>;
+        }
 
         <span class="comment">// Max
         </span>max.temp = max.temp.max(val.temp);
@@ -651,13 +663,25 @@
     }
 
     <span class="kw">let </span>count = data.len() <span class="kw">as </span>f64;
+
+    <span class="comment">// Calculate the wind results separately, discarding invalid wind values
+    </span><span class="kw">let </span>(wind, wind_kmh, wind_direction) = <span class="kw">if </span>wind_count == <span class="number">0.0 </span>{
+        (<span class="number">0.0</span>, <span class="number">0.0</span>, <span class="prelude-val">None</span>)
+    } <span class="kw">else </span>{
+        (
+            wind_east.hypot(wind_north) / wind_count,
+            wind_kmh_east.hypot(wind_kmh_north) / wind_count,
+            <span class="prelude-val">Some</span>(wind_east.atan2(wind_north).to_degrees().rem_euclid(<span class="number">360.0</span>)),
+        )
+    };
+
     <span class="kw">let </span>avg = ForecastAggregate {
         temp: temp / count,
         apparent: apparent / count,
         humidity: humidity / count,
-        wind: wind_east.hypot(wind_north) / count,
-        wind_kmh: wind_kmh_east.hypot(wind_kmh_north) / count,
-        wind_direction: <span class="prelude-val">Some</span>(wind_east.atan2(wind_north).to_degrees().rem_euclid(<span class="number">360.0</span>)),
+        wind,
+        wind_kmh,
+        wind_direction,
     };
     Forecast { avg, min, max, fin }
 }
